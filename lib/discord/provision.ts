@@ -1,4 +1,5 @@
 import "server-only";
+import { T } from "@/lib/tables";
 import { REST } from "discord.js";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { hasBotToken, serverEnv } from "@/lib/env";
@@ -77,10 +78,10 @@ export async function provisionGuild(guildId: string) {
 
   // ignoreDuplicates keeps user edits intact on re-login.
   const [rulesResult, commandsResult, settingsResult] = await Promise.all([
-    db.from("automod_rules").upsert(rules, { onConflict: "id", ignoreDuplicates: true }),
-    db.from("bot_commands").upsert(commands, { onConflict: "id", ignoreDuplicates: true }),
+    db.from(T.rules).upsert(rules, { onConflict: "id", ignoreDuplicates: true }),
+    db.from(T.commands).upsert(commands, { onConflict: "id", ignoreDuplicates: true }),
     db
-      .from("guild_settings")
+      .from(T.settings)
       .upsert({ guild_id: guildId }, { onConflict: "guild_id", ignoreDuplicates: true }),
   ]);
 
@@ -125,7 +126,7 @@ export async function syncGuild(guildId: string): Promise<GuildSyncResult> {
   }
 
   if (!guild) {
-    await db.from("guilds").update({ bot_installed: false }).eq("id", guildId);
+    await db.from(T.guilds).update({ bot_installed: false }).eq("id", guildId);
     return {
       ok: false,
       botInstalled: false,
@@ -158,19 +159,19 @@ export async function syncGuild(guildId: string): Promise<GuildSyncResult> {
     }));
 
   const { error: channelError } = rows.length
-    ? await db.from("channels").upsert(rows, { onConflict: "id" })
+    ? await db.from(T.channels).upsert(rows, { onConflict: "id" })
     : { error: null };
 
   // Drop channels that were deleted in Discord.
   const keep = new Set(rows.map((r) => r.id));
-  const { data: existing } = await db.from("channels").select("id").eq("guild_id", guildId);
+  const { data: existing } = await db.from(T.channels).select("id").eq("guild_id", guildId);
   const stale = (existing ?? []).map((c) => c.id as string).filter((id) => !keep.has(id));
   if (stale.length) {
-    await db.from("channels").delete().in("id", stale);
+    await db.from(T.channels).delete().in("id", stale);
   }
 
   await db
-    .from("guilds")
+    .from(T.guilds)
     .update({
       name: guild.name,
       icon_url: guild.icon ? `https://cdn.discordapp.com/icons/${guildId}/${guild.icon}.png` : null,
@@ -183,7 +184,7 @@ export async function syncGuild(guildId: string): Promise<GuildSyncResult> {
   let registered = 0;
   if (serverEnv.discordClientId) {
     const { data: commands } = await db
-      .from("bot_commands")
+      .from(T.commands)
       .select("name, description")
       .eq("guild_id", guildId)
       .eq("enabled", true);
@@ -217,7 +218,7 @@ export async function syncGuild(guildId: string): Promise<GuildSyncResult> {
 export async function syncAllGuilds() {
   if (!hasBotToken) return { synced: 0 };
   const db = supabaseAdmin();
-  const { data } = await db.from("guilds").select("id");
+  const { data } = await db.from(T.guilds).select("id");
 
   let synced = 0;
   for (const row of data ?? []) {
@@ -238,7 +239,7 @@ export async function refreshGuildStats(guildId: string) {
       approximate_presence_count?: number;
     };
     await supabaseAdmin()
-      .from("guilds")
+      .from(T.guilds)
       .update({
         member_count: guild.approximate_member_count ?? 0,
         online_count: guild.approximate_presence_count ?? 0,

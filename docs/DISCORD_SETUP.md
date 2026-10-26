@@ -32,8 +32,11 @@ Check progress any time at **`/api/health`** or the **`/setup`** page — both r
 
 1. Create a project (or pick one). **Free plan allows 2 projects per organization.**
 2. **SQL Editor** → paste the entire contents of [`supabase/schema.sql`](../supabase/schema.sql) → Run.
-   This creates `user_profiles`, `guilds`, `guild_members`, `channels`, `messages`, `automod_rules`,
-   `mod_actions`, `bot_commands`, `guild_settings`, `bot_status`, plus indexes and RLS policies.
+   This creates ten `xd_`-prefixed tables (`xd_user_profiles`, `xd_guilds`, `xd_guild_members`,
+   `xd_channels`, `xd_messages`, `xd_automod_rules`, `xd_mod_actions`, `xd_bot_commands`,
+   `xd_guild_settings`, `xd_bot_status`) plus indexes and RLS policies. The prefix keeps x-Discord
+   isolated inside a Supabase project it shares with other apps; names live in
+   [`lib/tables.ts`](../lib/tables.ts) if you ever need to change it.
 3. **Authentication → Providers → Discord** → enable, paste the **Client ID** and **Client Secret**
    from step 1. Copy the callback URL Supabase shows and make sure it is in Discord's redirect list.
 4. **Authentication → URL Configuration** → set **Site URL** to your app URL, and add

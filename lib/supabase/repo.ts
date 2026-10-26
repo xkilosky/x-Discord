@@ -1,4 +1,5 @@
 import "server-only";
+import { T } from "@/lib/tables";
 import { supabaseAdmin, supabaseServer } from "@/lib/supabase/server";
 import type { Repo } from "@/lib/repo";
 import type {
@@ -135,7 +136,7 @@ export const supabaseRepo: Repo = {
     if (!userId) return [];
 
     const { data, error } = await db
-      .from("guilds")
+      .from(T.guilds)
       .select("*, guild_members!inner(role, user_id)")
       .eq("guild_members.user_id", userId)
       .order("bot_installed", { ascending: false })
@@ -155,7 +156,7 @@ export const supabaseRepo: Repo = {
     if (!userId) return null;
 
     const { data } = await db
-      .from("guilds")
+      .from(T.guilds)
       .select("*, guild_members!inner(role, user_id)")
       .eq("id", id)
       .eq("guild_members.user_id", userId)
@@ -168,7 +169,7 @@ export const supabaseRepo: Repo = {
 
   async listChannels(guildId) {
     const db = await supabaseServer();
-    const { data, error } = await db.from("channels").select("*").eq("guild_id", guildId);
+    const { data, error } = await db.from(T.channels).select("*").eq("guild_id", guildId);
     if (error) throw new Error(`listChannels: ${error.message}`);
     const order: Record<string, number> = { Information: 0, Community: 1, Staff: 2, Voice: 3 };
     return (data ?? [])
@@ -181,21 +182,21 @@ export const supabaseRepo: Repo = {
     const [guild, channels, rules, messages, modActions, commands, settings] = await Promise.all([
       this.getGuild(guildId),
       this.listChannels(guildId),
-      db.from("automod_rules").select("*").eq("guild_id", guildId),
+      db.from(T.rules).select("*").eq("guild_id", guildId),
       db
-        .from("messages")
+        .from(T.messages)
         .select("*")
         .eq("guild_id", guildId)
         .order("created_at", { ascending: false })
         .limit(50),
       db
-        .from("mod_actions")
+        .from(T.modActions)
         .select("*")
         .eq("guild_id", guildId)
         .order("created_at", { ascending: false })
         .limit(50),
-      db.from("bot_commands").select("*").eq("guild_id", guildId).order("name"),
-      db.from("guild_settings").select("*").eq("guild_id", guildId).maybeSingle(),
+      db.from(T.commands).select("*").eq("guild_id", guildId).order("name"),
+      db.from(T.settings).select("*").eq("guild_id", guildId).maybeSingle(),
     ]);
 
     if (!guild) return null;
@@ -223,13 +224,13 @@ export const supabaseRepo: Repo = {
   async createMessage(input) {
     const db = await supabaseServer();
     const { data: channel } = await db
-      .from("channels")
+      .from(T.channels)
       .select("name")
       .eq("id", input.channelId)
       .maybeSingle();
 
     const { data, error } = await db
-      .from("messages")
+      .from(T.messages)
       .insert({
         guild_id: input.guildId,
         channel_id: input.channelId,
@@ -251,7 +252,7 @@ export const supabaseRepo: Repo = {
   async listDueMessages(now = new Date()) {
     const db = supabaseAdmin();
     const { data, error } = await db
-      .from("messages")
+      .from(T.messages)
       .select("*")
       .eq("status", "scheduled")
       .lte("scheduled_for", now.toISOString())
@@ -270,13 +271,13 @@ export const supabaseRepo: Repo = {
     if (patch.scheduledFor !== undefined) payload.scheduled_for = patch.scheduledFor;
     if (patch.discordMessageId !== undefined) payload.discord_message_id = patch.discordMessageId;
     if (Object.keys(payload).length === 0) return;
-    const { error } = await db.from("messages").update(payload).eq("id", id);
+    const { error } = await db.from(T.messages).update(payload).eq("id", id);
     if (error) throw new Error(`markMessage: ${error.message}`);
   },
 
   async deleteMessage(id) {
     const db = await supabaseServer();
-    const { error } = await db.from("messages").delete().eq("id", id);
+    const { error } = await db.from(T.messages).delete().eq("id", id);
     if (error) throw new Error(`deleteMessage: ${error.message}`);
   },
 
@@ -289,7 +290,7 @@ export const supabaseRepo: Repo = {
     if (patch.timeoutMinutes !== undefined) payload.timeout_minutes = patch.timeoutMinutes;
     if (patch.terms !== undefined) payload.terms = patch.terms;
     const { error } = await db
-      .from("automod_rules")
+      .from(T.rules)
       .update(payload)
       .eq("guild_id", guildId)
       .eq("id", ruleId);
@@ -303,7 +304,7 @@ export const supabaseRepo: Repo = {
     if (patch.response !== undefined) payload.response = patch.response;
     if (patch.adminOnly !== undefined) payload.admin_only = patch.adminOnly;
     const { error } = await db
-      .from("bot_commands")
+      .from(T.commands)
       .update(payload)
       .eq("guild_id", guildId)
       .eq("id", commandId);
@@ -313,7 +314,7 @@ export const supabaseRepo: Repo = {
   async logModAction(input) {
     const db = await supabaseServer();
     const { data, error } = await db
-      .from("mod_actions")
+      .from(T.modActions)
       .insert({
         guild_id: input.guildId,
         type: input.type,
@@ -337,21 +338,21 @@ export const supabaseRepo: Repo = {
     if (patch.timezone !== undefined) payload.timezone = patch.timezone;
     if (patch.automodDm !== undefined) payload.automod_dm = patch.automodDm;
     if (patch.mentionAlertRole !== undefined) payload.mention_alert_role = patch.mentionAlertRole;
-    const { error } = await db.from("guild_settings").upsert(payload, { onConflict: "guild_id" });
+    const { error } = await db.from(T.settings).upsert(payload, { onConflict: "guild_id" });
     if (error) throw new Error(`updateSettings: ${error.message}`);
   },
 
   async installBot(guildId) {
     const db = await supabaseServer();
-    const { error } = await db.from("guilds").update({ bot_installed: true }).eq("id", guildId);
+    const { error } = await db.from(T.guilds).update({ bot_installed: true }).eq("id", guildId);
     if (error) throw new Error(`installBot: ${error.message}`);
   },
 
   async botStatus() {
     const db = supabaseAdmin();
-    const { data } = await db.from("bot_status").select("*").eq("id", "singleton").maybeSingle();
+    const { data } = await db.from(T.botStatus).select("*").eq("id", "singleton").maybeSingle();
     const { count } = await db
-      .from("bot_commands")
+      .from(T.commands)
       .select("id", { count: "exact", head: true })
       .eq("enabled", true);
     return {
@@ -369,14 +370,14 @@ export const supabaseRepo: Repo = {
     const db = await supabaseServer();
     const [{ data: messages }, { data: actions }] = await Promise.all([
       db
-        .from("messages")
+        .from(T.messages)
         .select("id, content, channel_name, sent_at")
         .eq("guild_id", guildId)
         .eq("status", "sent")
         .order("sent_at", { ascending: false })
         .limit(limit),
       db
-        .from("mod_actions")
+        .from(T.modActions)
         .select("*")
         .eq("guild_id", guildId)
         .order("created_at", { ascending: false })

@@ -1,3 +1,4 @@
+import { T } from "@/lib/tables";
 import { NextResponse } from "next/server";
 import { DEMO_MODE, hasBotToken, serverEnv, supabaseConfigured } from "@/lib/env";
 import { getProviderStatus } from "@/lib/oauth-status";
@@ -20,9 +21,9 @@ export async function GET() {
     try {
       const db = supabaseAdmin();
       const [guilds, channels, messages] = await Promise.all([
-        db.from("guilds").select("id", { count: "exact", head: true }),
-        db.from("channels").select("id", { count: "exact", head: true }),
-        db.from("messages").select("id", { count: "exact", head: true }),
+        db.from(T.guilds).select("id", { count: "exact", head: true }),
+        db.from(T.channels).select("id", { count: "exact", head: true }),
+        db.from(T.messages).select("id", { count: "exact", head: true }),
       ]);
       database = {
         reachable: !guilds.error,

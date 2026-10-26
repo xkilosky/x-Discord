@@ -1,3 +1,4 @@
+import { T } from "@/lib/tables";
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/env";
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const meta = (user.user_metadata ?? {}) as Record<string, string | undefined>;
     const discordId = meta.provider_id ?? meta.sub ?? user.id;
 
-    await db.from("user_profiles").upsert(
+    await db.from(T.profiles).upsert(
       {
         id: user.id,
         discord_id: discordId,

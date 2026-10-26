@@ -1,4 +1,5 @@
 import "server-only";
+import { T } from "@/lib/tables";
 import { cookies } from "next/headers";
 import { DEMO_MODE } from "@/lib/env";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -43,7 +44,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const discordId = meta.provider_id ?? meta.sub ?? user.id;
 
   const { data: profile } = await db
-    .from("user_profiles")
+    .from(T.profiles)
     .select("*")
     .eq("discord_id", discordId)
     .maybeSingle();

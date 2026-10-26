@@ -1,4 +1,5 @@
 import "server-only";
+import { T } from "@/lib/tables";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { serverEnv } from "@/lib/env";
 import { provisionGuild } from "@/lib/discord/provision";
@@ -71,9 +72,9 @@ export async function syncUserGuilds(userId: string, providerToken: string | nul
     viewer_role: roleFor(g),
   }));
 
-  await admin.from("guilds").upsert(guildRows, { onConflict: "id" });
+  await admin.from(T.guilds).upsert(guildRows, { onConflict: "id" });
 
-  await admin.from("guild_members").upsert(
+  await admin.from(T.members).upsert(
     manageable.map((g) => ({ guild_id: g.id, user_id: userId, role: roleFor(g) })),
     { onConflict: "guild_id,user_id" },
   );

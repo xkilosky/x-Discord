@@ -1,16 +1,18 @@
--- x-Discord schema
--- Run in the Supabase SQL editor, or `npm run db:push` with SUPABASE_DB_URL set.
+-- x-Discord schema — namespaced with the `xd_` prefix.
 --
--- Auth model: users sign in with Discord once. Supabase's Discord provider
--- creates an auth.users row; we mirror the linked Discord identity in
--- user_profiles. Server access is granted through guild_members rows that the
--- sync job fills from Discord's /users/@me/guilds response.
+-- This project is shared with other apps, so every object here is prefixed and
+-- nothing else in `public` is touched. Run in the Supabase SQL editor, or apply
+-- with `supabase db push`. Idempotent: safe to re-run.
+--
+-- Auth model: users sign in with Discord through Supabase Auth. We mirror the
+-- Discord identity in xd_user_profiles and grant server access through
+-- xd_guild_members, which the sync job fills from Discord's /users/@me/guilds.
 
 create extension if not exists "pgcrypto";
 
 /* ------------------------------- identity -------------------------------- */
 
-create table if not exists public.user_profiles (
+create table if not exists public.xd_user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   discord_id text unique not null,
   username text not null,
@@ -21,7 +23,7 @@ create table if not exists public.user_profiles (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.guilds (
+create table if not exists public.xd_guilds (
   id text primary key,                       -- Discord guild id (snowflake)
   name text not null,
   initials text,
@@ -37,17 +39,17 @@ create table if not exists public.guilds (
 );
 
 -- Which dashboard user may manage which guild.
-create table if not exists public.guild_members (
-  guild_id text not null references public.guilds(id) on delete cascade,
-  user_id uuid not null references public.user_profiles(id) on delete cascade,
+create table if not exists public.xd_guild_members (
+  guild_id text not null references public.xd_guilds(id) on delete cascade,
+  user_id uuid not null references public.xd_user_profiles(id) on delete cascade,
   role text not null default 'moderator'
     check (role in ('owner', 'admin', 'moderator')),
   primary key (guild_id, user_id)
 );
 
-create table if not exists public.channels (
+create table if not exists public.xd_channels (
   id text primary key,
-  guild_id text not null references public.guilds(id) on delete cascade,
+  guild_id text not null references public.xd_guilds(id) on delete cascade,
   name text not null,
   category text not null default 'Community',
   type text not null default 'text'
@@ -58,10 +60,10 @@ create table if not exists public.channels (
 
 /* ------------------------------- messaging -------------------------------- */
 
-create table if not exists public.messages (
+create table if not exists public.xd_messages (
   id uuid primary key default gen_random_uuid(),
-  guild_id text not null references public.guilds(id) on delete cascade,
-  channel_id text not null references public.channels(id) on delete cascade,
+  guild_id text not null references public.xd_guilds(id) on delete cascade,
+  channel_id text not null references public.xd_channels(id) on delete cascade,
   channel_name text not null,
   content text not null default '',
   embed jsonb,
@@ -75,15 +77,16 @@ create table if not exists public.messages (
   created_at timestamptz not null default now()
 );
 
-create index if not exists messages_due_idx
-  on public.messages (scheduled_for) where status = 'scheduled';
-create index if not exists messages_guild_idx on public.messages (guild_id, created_at desc);
+create index if not exists xd_messages_due_idx
+  on public.xd_messages (scheduled_for) where status = 'scheduled';
+create index if not exists xd_messages_guild_idx
+  on public.xd_messages (guild_id, created_at desc);
 
 /* -------------------------------- automod --------------------------------- */
 
-create table if not exists public.automod_rules (
+create table if not exists public.xd_automod_rules (
   id text primary key,
-  guild_id text not null references public.guilds(id) on delete cascade,
+  guild_id text not null references public.xd_guilds(id) on delete cascade,
   kind text not null,
   name text not null,
   description text not null default '',
@@ -96,9 +99,9 @@ create table if not exists public.automod_rules (
   triggers_24h int not null default 0
 );
 
-create table if not exists public.mod_actions (
+create table if not exists public.xd_mod_actions (
   id uuid primary key default gen_random_uuid(),
-  guild_id text not null references public.guilds(id) on delete cascade,
+  guild_id text not null references public.xd_guilds(id) on delete cascade,
   type text not null check (type in ('warn', 'timeout', 'kick', 'ban', 'unban', 'automod')),
   target_id text not null,
   target_name text not null,
@@ -108,14 +111,14 @@ create table if not exists public.mod_actions (
   created_at timestamptz not null default now()
 );
 
-create index if not exists mod_actions_guild_idx
-  on public.mod_actions (guild_id, created_at desc);
+create index if not exists xd_mod_actions_guild_idx
+  on public.xd_mod_actions (guild_id, created_at desc);
 
 /* -------------------------------- commands -------------------------------- */
 
-create table if not exists public.bot_commands (
+create table if not exists public.xd_bot_commands (
   id text primary key,
-  guild_id text not null references public.guilds(id) on delete cascade,
+  guild_id text not null references public.xd_guilds(id) on delete cascade,
   name text not null,
   description text not null default '',
   enabled boolean not null default true,
@@ -124,8 +127,8 @@ create table if not exists public.bot_commands (
   runs_7d int not null default 0
 );
 
-create table if not exists public.guild_settings (
-  guild_id text primary key references public.guilds(id) on delete cascade,
+create table if not exists public.xd_guild_settings (
+  guild_id text primary key references public.xd_guilds(id) on delete cascade,
   log_channel_id text,
   alert_channel_id text,
   timezone text not null default 'UTC',
@@ -133,7 +136,7 @@ create table if not exists public.guild_settings (
   mention_alert_role text
 );
 
-create table if not exists public.bot_status (
+create table if not exists public.xd_bot_status (
   id text primary key default 'singleton',
   online boolean not null default false,
   latency_ms int not null default 0,
@@ -145,81 +148,143 @@ create table if not exists public.bot_status (
 
 /* ------------------------------ row level security ------------------------ */
 
-alter table public.user_profiles enable row level security;
-alter table public.guilds enable row level security;
-alter table public.guild_members enable row level security;
-alter table public.channels enable row level security;
-alter table public.messages enable row level security;
-alter table public.automod_rules enable row level security;
-alter table public.mod_actions enable row level security;
-alter table public.bot_commands enable row level security;
-alter table public.guild_settings enable row level security;
-alter table public.bot_status enable row level security;
+alter table public.xd_user_profiles enable row level security;
+alter table public.xd_guilds enable row level security;
+alter table public.xd_guild_members enable row level security;
+alter table public.xd_channels enable row level security;
+alter table public.xd_messages enable row level security;
+alter table public.xd_automod_rules enable row level security;
+alter table public.xd_mod_actions enable row level security;
+alter table public.xd_bot_commands enable row level security;
+alter table public.xd_guild_settings enable row level security;
+alter table public.xd_bot_status enable row level security;
 
--- A user can read guilds they are a member of.
-drop policy if exists "read own guilds" on public.guilds;
-create policy "read own guilds" on public.guilds for select
+-- Read: any guild you are a member of.
+drop policy if exists "xd read own guilds" on public.xd_guilds;
+create policy "xd read own guilds" on public.xd_guilds for select
   using (
     exists (
-      select 1 from public.guild_members m
-      where m.guild_id = guilds.id and m.user_id = auth.uid()
+      select 1 from public.xd_guild_members m
+      where m.guild_id = xd_guilds.id and m.user_id = auth.uid()
     )
   );
 
-drop policy if exists "manage own guilds" on public.guilds;
-create policy "manage own guilds" on public.guilds for update
+-- Update: owner/admin only (bot install flag, counts, name).
+drop policy if exists "xd manage own guilds" on public.xd_guilds;
+create policy "xd manage own guilds" on public.xd_guilds for update
   using (
     exists (
-      select 1 from public.guild_members m
-      where m.guild_id = guilds.id and m.user_id = auth.uid()
+      select 1 from public.xd_guild_members m
+      where m.guild_id = xd_guilds.id and m.user_id = auth.uid()
         and m.role in ('owner', 'admin')
     )
   );
 
--- Child tables: readable by guild members, writable by admins/owners.
-do $$
-declare t text;
-begin
-  foreach t in array array['channels', 'messages', 'automod_rules', 'mod_actions',
-                           'bot_commands', 'guild_settings']
-  loop
-    execute format('drop policy if exists "member read %1$s" on public.%1$I', t);
-    execute format($f$
-      create policy "member read %1$s" on public.%1$I for select using (
-        exists (
-          select 1 from public.guild_members m
-          where m.guild_id = %1$I.guild_id and m.user_id = auth.uid()
-        )
-      )
-    $f$, t);
+drop policy if exists "xd read own memberships" on public.xd_guild_members;
+create policy "xd read own memberships" on public.xd_guild_members for select
+  using (user_id = auth.uid());
 
-    execute format('drop policy if exists "admin write %1$s" on public.%1$I', t);
-    execute format($f$
-      create policy "admin write %1$s" on public.%1$I for all using (
-        exists (
-          select 1 from public.guild_members m
-          where m.guild_id = %1$I.guild_id and m.user_id = auth.uid()
-            and m.role in ('owner', 'admin')
-        )
-      ) with check (
-        exists (
-          select 1 from public.guild_members m
-          where m.guild_id = %1$I.guild_id and m.user_id = auth.uid()
-            and m.role in ('owner', 'admin')
-        )
-      )
-    $f$, t);
-  end loop;
-end $$;
+drop policy if exists "xd read own profile" on public.xd_user_profiles;
+create policy "xd read own profile" on public.xd_user_profiles for select
+  using (id = auth.uid());
 
-drop policy if exists "read own profile" on public.user_profiles;
-create policy "read own profile" on public.user_profiles for select using (id = auth.uid());
+drop policy if exists "xd update own profile" on public.xd_user_profiles;
+create policy "xd update own profile" on public.xd_user_profiles for update
+  using (id = auth.uid());
 
-drop policy if exists "update own profile" on public.user_profiles;
-create policy "update own profile" on public.user_profiles for update using (id = auth.uid());
+drop policy if exists "xd read bot status" on public.xd_bot_status;
+create policy "xd read bot status" on public.xd_bot_status for select using (true);
 
-drop policy if exists "read own memberships" on public.guild_members;
-create policy "read own memberships" on public.guild_members for select using (user_id = auth.uid());
+/* Child tables: members read, owner/admin write. */
 
-drop policy if exists "public bot status" on public.bot_status;
-create policy "public bot status" on public.bot_status for select using (true);
+drop policy if exists "xd read channels" on public.xd_channels;
+create policy "xd read channels" on public.xd_channels for select using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_channels.guild_id and m.user_id = auth.uid())
+);
+drop policy if exists "xd write channels" on public.xd_channels;
+create policy "xd write channels" on public.xd_channels for all using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_channels.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+) with check (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_channels.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+);
+
+drop policy if exists "xd read messages" on public.xd_messages;
+create policy "xd read messages" on public.xd_messages for select using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_messages.guild_id and m.user_id = auth.uid())
+);
+drop policy if exists "xd write messages" on public.xd_messages;
+create policy "xd write messages" on public.xd_messages for all using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_messages.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+) with check (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_messages.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+);
+
+drop policy if exists "xd read rules" on public.xd_automod_rules;
+create policy "xd read rules" on public.xd_automod_rules for select using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_automod_rules.guild_id and m.user_id = auth.uid())
+);
+drop policy if exists "xd write rules" on public.xd_automod_rules;
+create policy "xd write rules" on public.xd_automod_rules for all using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_automod_rules.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+) with check (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_automod_rules.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+);
+
+drop policy if exists "xd read mod actions" on public.xd_mod_actions;
+create policy "xd read mod actions" on public.xd_mod_actions for select using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_mod_actions.guild_id and m.user_id = auth.uid())
+);
+drop policy if exists "xd write mod actions" on public.xd_mod_actions;
+create policy "xd write mod actions" on public.xd_mod_actions for insert with check (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_mod_actions.guild_id and m.user_id = auth.uid())
+);
+-- Cases are immutable once written: no update or delete policy on purpose.
+
+drop policy if exists "xd read commands" on public.xd_bot_commands;
+create policy "xd read commands" on public.xd_bot_commands for select using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_bot_commands.guild_id and m.user_id = auth.uid())
+);
+drop policy if exists "xd write commands" on public.xd_bot_commands;
+create policy "xd write commands" on public.xd_bot_commands for all using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_bot_commands.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+) with check (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_bot_commands.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+);
+
+drop policy if exists "xd read settings" on public.xd_guild_settings;
+create policy "xd read settings" on public.xd_guild_settings for select using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_guild_settings.guild_id and m.user_id = auth.uid())
+);
+drop policy if exists "xd write settings" on public.xd_guild_settings;
+create policy "xd write settings" on public.xd_guild_settings for all using (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_guild_settings.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+) with check (
+  exists (select 1 from public.xd_guild_members m
+          where m.guild_id = xd_guild_settings.guild_id and m.user_id = auth.uid()
+            and m.role in ('owner', 'admin'))
+);

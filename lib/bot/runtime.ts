@@ -1,4 +1,5 @@
 import "server-only";
+import { T } from "@/lib/tables";
 import { hasBotToken, supabaseConfigured } from "@/lib/env";
 
 /**
@@ -56,7 +57,7 @@ async function persistStatus(patch: Partial<Snapshot>) {
   try {
     const { supabaseAdmin } = await import("@/lib/supabase/server");
     await supabaseAdmin()
-      .from("bot_status")
+      .from(T.botStatus)
       .upsert(
         {
           id: "singleton",
