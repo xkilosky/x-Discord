@@ -5,6 +5,12 @@ server. Budget ~15 minutes. You need a Discord account and a Supabase project.
 
 Check progress any time at **`/api/health`** or the **`/setup`** page — both report what's missing.
 
+> **This deployment.** The hosted instance is <https://xcord-three.vercel.app> and it shares the
+> Supabase project `akspfiunvmycpgsovhip` with other apps (hence the `xd_` table prefix). The schema
+> is already applied and the Supabase/cron environment variables are already set on Vercel, so for
+> this instance only **steps 1, 2.3, 2.4 and the two Discord variables in step 3** are left.
+> Until they are done the dashboard reports `ready: false` and keeps the demo dataset reachable.
+
 ---
 
 ## 1. Create the Discord application
@@ -15,12 +21,12 @@ Check progress any time at **`/api/health`** or the **`/setup`** page — both r
    - **Client Secret** ("Reset Secret") → used by Supabase, *not* by the dashboard
 3. Still on **OAuth2**, add these **Redirect URLs** (they must match exactly):
    ```
-   https://<your-project-ref>.supabase.co/auth/v1/callback
-   http://localhost:3000/auth/callback
+   https://akspfiunvmycpgsovhip.supabase.co/auth/v1/callback
    https://xcord-three.vercel.app/auth/callback
+   http://localhost:3000/auth/callback
    ```
-   The first one is what Supabase uses in production. Your project ref is the subdomain of your
-   Supabase URL.
+   The first line is what Supabase itself uses in production — Discord sends the browser there and
+   Supabase then forwards to your app. The other two are the apps that may receive the session.
 4. **Bot** tab → **Reset Token** → copy → `DISCORD_BOT_TOKEN`.
 5. **Bot** tab → enable the **privileged intents**:
    - ✅ **Server Members Intent** (needed to look up members for kick/ban)
@@ -30,7 +36,8 @@ Check progress any time at **`/api/health`** or the **`/setup`** page — both r
 
 ## 2. Supabase
 
-1. Create a project (or pick one). **Free plan allows 2 projects per organization.**
+1. Pick a project — the schema is namespaced, so it can live in a project shared with other apps.
+   (Free plan allows 2 projects per organization.)
 2. **SQL Editor** → paste the entire contents of [`supabase/schema.sql`](../supabase/schema.sql) → Run.
    This creates ten `xd_`-prefixed tables (`xd_user_profiles`, `xd_guilds`, `xd_guild_members`,
    `xd_channels`, `xd_messages`, `xd_automod_rules`, `xd_mod_actions`, `xd_bot_commands`,
@@ -54,12 +61,14 @@ Set these on the host (Vercel → Project → Settings → Environment Variables
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → API → service_role | **yes** |
 | `DISCORD_BOT_TOKEN` | Discord → Bot → Reset Token | **yes** |
 | `DISCORD_CLIENT_ID` | Discord → OAuth2 → Client ID | no |
+
+On the hosted instance everything above except the two `DISCORD_*` variables is already configured.
 | `NEXT_PUBLIC_APP_URL` | your deployment URL | no |
 | `CRON_SECRET` | any long random string | **yes** |
 | `BOT_DISABLED` | `1` on serverless hosts | no |
 
 `DISCORD_CLIENT_SECRET` is only needed if you run the OAuth flow yourself; with Supabase Auth the
-secret lives in the Supabase dashboard.
+secret lives in the Supabase dashboard (step 2.3) and is never set on the host.
 
 Changing `NEXT_PUBLIC_*` variables requires a **redeploy** — they are inlined at build time.
 
