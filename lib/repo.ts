@@ -1,4 +1,5 @@
 import "server-only";
+import { cookies } from "next/headers";
 import { demo } from "@/lib/demo/store";
 import { DEMO_MODE } from "@/lib/env";
 import { supabaseRepo } from "@/lib/supabase/repo";
@@ -34,7 +35,10 @@ export interface Repo {
     author: string;
   }): Promise<MessageRecord>;
   listDueMessages(now?: Date): Promise<MessageRecord[]>;
-  markMessage(id: string, patch: Partial<MessageRecord>): Promise<void>;
+  markMessage(
+    id: string,
+    patch: Partial<MessageRecord> & { discordMessageId?: string | null },
+  ): Promise<void>;
   deleteMessage(id: string): Promise<void>;
   updateRule(guildId: string, ruleId: string, patch: Partial<AutomodRule>): Promise<void>;
   updateCommand(guildId: string, commandId: string, patch: Partial<CommandConfig>): Promise<void>;
@@ -94,6 +98,24 @@ const demoRepo: Repo = {
   },
 };
 
+/** Cookie that pins a session to the demo dataset on a live deployment. */
+export const MODE_COOKIE = "xd_mode";
+
+export async function demoActive(): Promise<boolean> {
+  if (DEMO_MODE) return true;
+  try {
+    const store = await cookies();
+    return store.get(MODE_COOKIE)?.value === "demo";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Storage handle for the current request. Demo mode is the default when no
+ * credentials exist, and stays reachable on a live deployment so the product
+ * can still be explored before real Discord credentials are wired up.
+ */
 export async function getRepo(): Promise<Repo> {
-  return DEMO_MODE ? demoRepo : supabaseRepo;
+  return (await demoActive()) ? demoRepo : supabaseRepo;
 }

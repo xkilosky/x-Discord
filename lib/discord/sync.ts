@@ -1,6 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { serverEnv } from "@/lib/env";
+import { provisionGuild } from "@/lib/discord/provision";
 
 type DiscordGuild = {
   id: string;
@@ -77,5 +78,13 @@ export async function syncUserGuilds(userId: string, providerToken: string | nul
     { onConflict: "guild_id,user_id" },
   );
 
-  return { synced: manageable.length, baseUrl: serverEnv.appUrl };
+  // Give every new guild a usable dashboard immediately: default AutoMod
+  // rules, slash commands and a settings row. Idempotent on re-login.
+  const provisioned: string[] = [];
+  for (const g of manageable) {
+    const result = await provisionGuild(g.id);
+    if (result.errors.length === 0) provisioned.push(g.id);
+  }
+
+  return { synced: manageable.length, provisioned: provisioned.length, baseUrl: serverEnv.appUrl };
 }

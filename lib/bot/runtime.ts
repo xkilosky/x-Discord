@@ -115,7 +115,7 @@ export async function bootBot(): Promise<void> {
       ],
     });
 
-    client.once(Events.ClientReady, (ready) => {
+    client.once(Events.ClientReady, async (ready) => {
       s.snapshot = {
         state: "ready",
         tag: ready.user.tag,
@@ -127,6 +127,15 @@ export async function bootBot(): Promise<void> {
       ready.user.setActivity("/help · x-Discord", { type: ActivityType.Watching });
       void persistStatus(s.snapshot);
       console.log(`[bot] ${ready.user.tag} connected to ${ready.guilds.cache.size} guilds`);
+
+      // Hydrate the dashboard with real channels/commands for every guild.
+      try {
+        const { syncAllGuilds } = await import("@/lib/discord/provision");
+        const result = await syncAllGuilds();
+        console.log(`[bot] synced ${result.synced} guild(s)`);
+      } catch (error) {
+        console.error("[bot] guild sync failed", error);
+      }
     });
 
     client.on(Events.InteractionCreate, async (interaction) => {
@@ -168,6 +177,17 @@ export async function bootBot(): Promise<void> {
             .reply({ content: "Something went wrong running that command.", flags: MessageFlags.Ephemeral })
             .catch(() => {});
         }
+      }
+    });
+
+    client.on(Events.GuildCreate, async (guild) => {
+      try {
+        const { provisionGuild, syncGuild } = await import("@/lib/discord/provision");
+        await provisionGuild(guild.id);
+        await syncGuild(guild.id);
+        console.log(`[bot] joined ${guild.name} (${guild.id}) and synced`);
+      } catch (error) {
+        console.error("[bot] failed to sync newly joined guild", error);
       }
     });
 

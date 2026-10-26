@@ -22,6 +22,7 @@ import { getRepo } from "@/lib/repo";
 import { botInviteUrl } from "@/lib/env";
 import { countdown, formatNumber, relativeTime } from "@/lib/utils";
 import { installBot } from "@/app/actions/guild";
+import { SyncButton } from "@/components/settings/sync-button";
 
 export const metadata = { title: "All servers" };
 
@@ -185,15 +186,29 @@ export default async function DashboardPage() {
                       <p className="rounded-lg border border-amber/20 bg-amber/8 px-2.5 py-2 text-[11.5px] leading-relaxed text-[#f7d394]">
                         The bot isn&apos;t in this server yet. Add it to unlock messaging and AutoMod.
                       </p>
-                      <form action={installBot}>
-                        <input type="hidden" name="guildId" value={g.id} />
-                        <button
-                          type="submit"
-                          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-[#7b6bff] to-[#5b57f0] px-2.5 py-2 text-[12px] font-semibold text-white transition hover:brightness-110"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Add bot to {g.name}
-                        </button>
-                      </form>
+                      {demo ? (
+                        <form action={installBot}>
+                          <input type="hidden" name="guildId" value={g.id} />
+                          <button
+                            type="submit"
+                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-[#7b6bff] to-[#5b57f0] px-2.5 py-2 text-[12px] font-semibold text-white transition hover:brightness-110"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add bot to {g.name}
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="mt-2 space-y-1.5">
+                          <a
+                            href={botInviteUrl(g.id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-[#7b6bff] to-[#5b57f0] px-2.5 py-2 text-[12px] font-semibold text-white transition hover:brightness-110"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Invite bot to {g.name}
+                          </a>
+                          <SyncButton guildId={g.id} label="Already invited? Sync" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </article>

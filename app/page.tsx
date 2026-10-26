@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { DEMO_MODE, botInviteUrl } from "@/lib/env";
-import { signInWithDiscord } from "@/app/actions/auth";
+import { getProviderStatus } from "@/lib/oauth-status";
+import { signInWithDiscord, startDemo } from "@/app/actions/auth";
 import { Badge } from "@/components/ui/badge";
 
 const FEATURES = [
@@ -187,6 +188,11 @@ export default async function LandingPage() {
   const user = await getSessionUser();
   if (user) redirect("/dashboard");
 
+  // On a live deployment we check whether Discord sign-in can actually work,
+  // so the primary CTA never leads to a broken OAuth screen.
+  const providers = DEMO_MODE ? null : await getProviderStatus();
+  const needsSetup = !DEMO_MODE && !providers?.discord;
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-white/6 bg-ink-900/70 backdrop-blur-xl">
@@ -218,11 +224,17 @@ export default async function LandingPage() {
             <Link href="/dashboard" className="btn btn-ghost !py-2 !text-[13px]">
               Open dashboard
             </Link>
-            <form action={signInWithDiscord}>
-              <button type="submit" className="btn btn-primary !py-2 !text-[13px]">
-                Sign in with Discord
-              </button>
-            </form>
+            {needsSetup ? (
+              <Link href="/setup" className="btn btn-primary !py-2 !text-[13px]">
+                Finish setup
+              </Link>
+            ) : (
+              <form action={signInWithDiscord}>
+                <button type="submit" className="btn btn-primary !py-2 !text-[13px]">
+                  Sign in with Discord
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </header>
@@ -234,7 +246,7 @@ export default async function LandingPage() {
             <div className="animate-rise">
               <span className="chip border-violet/30 bg-violet/12 text-[#d6ceff]">
                 <Sparkles className="h-3 w-3" />
-                One OAuth connection · every server
+                {needsSetup ? "Deployed · Discord setup pending" : "One OAuth connection · every server"}
               </span>
 
               <h1 className="mt-5 text-balance text-[2.6rem] font-semibold leading-[1.05] tracking-[-0.03em] text-white sm:text-[3.4rem]">
@@ -254,15 +266,22 @@ export default async function LandingPage() {
               </p>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
-                <form action={signInWithDiscord}>
-                  <button type="submit" className="btn btn-primary !px-5 !py-3 !text-sm">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                      <path d="M20.3 4.5A19 19 0 0 0 15.6 3l-.3.7a14 14 0 0 1 4.1 1.4 13.4 13.4 0 0 0-11-.5l-.6.5A14 14 0 0 1 8.7 3.7L8.4 3a19 19 0 0 0-4.7 1.5C1.1 8.4.5 12.2.8 16a19 19 0 0 0 5.8 3l.7-1.3a12 12 0 0 1-1.9-.9l.5-.4a13.5 13.5 0 0 0 11.6 0l.5.4c-.6.4-1.2.7-1.9.9l.7 1.3a19 19 0 0 0 5.8-3c.4-4.5-.6-8.3-3.3-11.5ZM8.6 14c-.8 0-1.4-.8-1.4-1.7 0-1 .6-1.7 1.4-1.7.9 0 1.5.8 1.4 1.7 0 1-.6 1.7-1.4 1.7Zm6.4 0c-.8 0-1.4-.8-1.4-1.7 0-1 .6-1.7 1.4-1.7.9 0 1.5.8 1.4 1.7 0 1-.6 1.7-1.4 1.7Z" />
-                    </svg>
-                    Connect Discord
+                {needsSetup ? (
+                  <Link href="/setup" className="btn btn-primary !px-5 !py-3 !text-sm">
+                    <KeyRound className="h-4 w-4" /> Finish Discord setup
                     <ArrowRight className="h-4 w-4" />
-                  </button>
-                </form>
+                  </Link>
+                ) : (
+                  <form action={signInWithDiscord}>
+                    <button type="submit" className="btn btn-primary !px-5 !py-3 !text-sm">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                        <path d="M20.3 4.5A19 19 0 0 0 15.6 3l-.3.7a14 14 0 0 1 4.1 1.4 13.4 13.4 0 0 0-11-.5l-.6.5A14 14 0 0 1 8.7 3.7L8.4 3a19 19 0 0 0-4.7 1.5C1.1 8.4.5 12.2.8 16a19 19 0 0 0 5.8 3l.7-1.3a12 12 0 0 1-1.9-.9l.5-.4a13.5 13.5 0 0 0 11.6 0l.5.4c-.6.4-1.2.7-1.9.9l.7 1.3a19 19 0 0 0 5.8-3c.4-4.5-.6-8.3-3.3-11.5ZM8.6 14c-.8 0-1.4-.8-1.4-1.7 0-1 .6-1.7 1.4-1.7.9 0 1.5.8 1.4 1.7 0 1-.6 1.7-1.4 1.7Zm6.4 0c-.8 0-1.4-.8-1.4-1.7 0-1 .6-1.7 1.4-1.7.9 0 1.5.8 1.4 1.7 0 1-.6 1.7-1.4 1.7Z" />
+                      </svg>
+                      Connect Discord
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </form>
+                )}
                 <a href="#features" className="btn btn-ghost !px-4 !py-3 !text-sm">
                   See what&apos;s inside
                 </a>
@@ -401,11 +420,24 @@ export default async function LandingPage() {
                 ? "This build runs on a full demo dataset — sign in and every screen, schedule and toggle is live and editable."
                 : "Connect your Discord account and your servers appear in seconds."}
             </p>
-            <form action={signInWithDiscord} className="relative mt-7 flex justify-center">
-              <button type="submit" className="btn btn-primary !px-6 !py-3 !text-sm">
-                Connect Discord <ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
+            <div className="relative mt-7 flex flex-wrap justify-center gap-2">
+              {needsSetup ? (
+                <Link href="/setup" className="btn btn-primary !px-6 !py-3 !text-sm">
+                  Finish setup <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <form action={signInWithDiscord}>
+                  <button type="submit" className="btn btn-primary !px-6 !py-3 !text-sm">
+                    Connect Discord <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+              )}
+              <form action={startDemo}>
+                <button type="submit" className="btn btn-ghost !px-5 !py-3 !text-sm">
+                  Explore the demo
+                </button>
+              </form>
+            </div>
             {DEMO_MODE ? (
               <p className="relative mt-3 text-[11px] text-mist-500">
                 Demo mode is on — no Discord credentials required.

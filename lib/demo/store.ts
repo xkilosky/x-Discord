@@ -1,3 +1,4 @@
+import { RULE_BLUEPRINTS, COMMAND_BLUEPRINTS } from "@/lib/presets";
 import type {
   ActivityItem,
   AutomodRule,
@@ -150,104 +151,6 @@ function buildGuild(seed: GuildSeed): Guild {
   };
 }
 
-const RULE_BLUEPRINTS: Array<
-  Pick<AutomodRule, "kind" | "name" | "description" | "threshold" | "action" | "terms"> & {
-    timeoutMinutes?: number;
-  }
-> = [
-  {
-    kind: "spam",
-    name: "Anti-spam",
-    description: "Deletes bursts of messages sent faster than the threshold.",
-    threshold: 5,
-    action: "timeout",
-    timeoutMinutes: 10,
-    terms: [],
-  },
-  {
-    kind: "invites",
-    name: "Block Discord invites",
-    description: "Removes discord.gg links posted by members without staff roles.",
-    threshold: 1,
-    action: "delete",
-    terms: [],
-  },
-  {
-    kind: "banned_words",
-    name: "Banned words",
-    description: "Filters slurs and blacklisted phrases before they reach the channel.",
-    threshold: 1,
-    action: "warn",
-    terms: ["slur-placeholder", "buy-followers", "free-nitro"],
-  },
-  {
-    kind: "caps",
-    name: "Excessive caps",
-    description: "Flags messages above the caps percentage when longer than 12 characters.",
-    threshold: 70,
-    action: "delete",
-    terms: [],
-  },
-  {
-    kind: "links",
-    name: "Link filter",
-    description: "Blocks URLs that are not on the allowlist. Great for scam waves.",
-    threshold: 1,
-    action: "delete",
-    terms: ["github.com", "youtube.com", "steamcommunity.com", "twitch.tv"],
-  },
-  {
-    kind: "mentions",
-    name: "Mass mention guard",
-    description: "Stops @everyone style pile-ons and mention spam.",
-    threshold: 6,
-    action: "timeout",
-    timeoutMinutes: 30,
-    terms: [],
-  },
-  {
-    kind: "attachments",
-    name: "Attachment screening",
-    description: "Holds executables and archives for staff review before they post.",
-    threshold: 1,
-    action: "log",
-    terms: [".exe", ".scr", ".bat", ".zip"],
-  },
-];
-
-const COMMAND_BLUEPRINTS: Array<Pick<CommandConfig, "name" | "description" | "response">> = [
-  {
-    name: "rules",
-    description: "Show the server rules",
-    response: "Read the rules in <#rules> before posting. Breaking them gets you timed out, not banned. Ask staff if anything is unclear.",
-  },
-  {
-    name: "announce",
-    description: "Post an announcement to the configured channel",
-    response: "Announcement queued and posted.",
-  },
-  {
-    name: "ping",
-    description: "Check bot latency",
-    response: "Pong — shard 1 is healthy.",
-  },
-  {
-    name: "poll",
-    description: "Create a quick reaction poll",
-    response: "Poll created. Voting closes in 24 hours.",
-  },
-  {
-    name: "ticket",
-    description: "Open a private staff ticket",
-    response: "Ticket opened. A moderator will reply here shortly.",
-  },
-  {
-    name: "rank",
-    description: "Show a member's activity rank",
-    response: "Rank lookup complete.",
-  },
-];
-
 function buildRules(guildId: string): AutomodRule[] {
   return RULE_BLUEPRINTS.map((blueprint, i) => ({
     id: `${guildId}-rule-${i}`,
@@ -255,7 +158,7 @@ function buildRules(guildId: string): AutomodRule[] {
     kind: blueprint.kind,
     name: blueprint.name,
     description: blueprint.description,
-    enabled: i < 5,
+    enabled: blueprint.defaultEnabled ?? i < 5,
     threshold: blueprint.threshold,
     action: blueprint.action,
     timeoutMinutes: blueprint.timeoutMinutes ?? 10,
@@ -270,9 +173,9 @@ function buildCommands(guildId: string): CommandConfig[] {
     guildId,
     name: blueprint.name,
     description: blueprint.description,
-    enabled: i !== 5,
+    enabled: blueprint.defaultEnabled ?? i !== 5,
     response: blueprint.response,
-    adminOnly: blueprint.name === "announce",
+    adminOnly: blueprint.adminOnly ?? false,
     runs7d: [412, 9, 318, 26, 41, 0][i] ?? 0,
   }));
 }
@@ -569,7 +472,10 @@ export const demo = {
     return record;
   },
 
-  updateMessage(id: string, patch: Partial<MessageRecord>): MessageRecord | null {
+  updateMessage(
+    id: string,
+    patch: Partial<MessageRecord> & { discordMessageId?: string | null },
+  ): MessageRecord | null {
     const msg = state().messages.find((m) => m.id === id);
     if (!msg) return null;
     Object.assign(msg, patch);

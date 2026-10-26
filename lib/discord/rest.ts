@@ -68,6 +68,41 @@ export async function registerGuildCommands(
   }
 }
 
+/**
+ * Discord has no global user lookup by name. Guild member search is the only
+ * server-side option, and it needs the GUILD_MEMBERS privileged intent.
+ */
+export async function resolveMemberId(input: {
+  guildId: string;
+  query: string;
+}): Promise<{ ok: boolean; userId?: string; username?: string; error?: string }> {
+  if (!hasBotToken) return { ok: false, error: "Bot token not configured" };
+  if (/^\d{15,25}$/.test(input.query)) return { ok: true, userId: input.query };
+
+  const cleaned = input.query.replace(/^@/, "").trim();
+  if (!cleaned) return { ok: false, error: "Empty member name" };
+
+  try {
+    const members = (await client().get(
+      `/guilds/${input.guildId}/members/search?query=${encodeURIComponent(cleaned)}&limit=5`,
+    )) as Array<{ user: { id: string; username: string } }>;
+
+    const exact =
+      members.find((m) => m.user.username.toLowerCase() === cleaned.toLowerCase()) ?? members[0];
+
+    if (!exact) return { ok: false, error: `No member matching “${cleaned}” in this server.` };
+    return { ok: true, userId: exact.user.id, username: exact.user.username };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? `Could not look up that member (${error.message}). Paste their user ID instead.`
+          : "Member lookup failed",
+    };
+  }
+}
+
 /** Timeout / kick / ban helpers used by the moderation console. */
 export async function applyModeration(input: {
   guildId: string;

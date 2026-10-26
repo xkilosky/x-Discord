@@ -20,6 +20,7 @@ Built with Next.js 16 (App Router) · TypeScript · Tailwind 4 · Supabase · di
 | **Moderation** | Warn / timeout / kick / ban with a permanent, append-only case log. |
 | **Slash commands** | Edit response text and staff-only permissions per server; registered per guild so nothing leaks between communities. |
 | **Bot health** | Latency, uptime, guild count and scheduler heartbeats in the UI. |
+| **Live sync** | Pull real channels, member counts and slash commands from Discord per server; defaults are provisioned on first login. |
 
 ## Two ways to run it
 
@@ -38,6 +39,9 @@ npm run dev
 The demo session is a cookie. Nothing is written to disk, so a restart resets the story.
 
 ### 2. Live mode — real Discord
+
+> **Runbook:** [`docs/DISCORD_SETUP.md`](docs/DISCORD_SETUP.md) has the click-by-click version,
+> including every redirect URL and env var. Below is the short form.
 
 **a. Create the Discord application**
 1. https://discord.com/developers/applications → *New Application*.
@@ -59,8 +63,14 @@ cp .env.example .env.local   # fill in the values
 npm run dev
 ```
 
-Then open the dashboard and click **Invite bot** to add it to a server. The sync job fills
-`guild_members` from the servers where you have *Manage Server*, and RLS keeps everything else out.
+Then open the dashboard and click **Invite bot** to add it to a server, followed by
+**Settings → Sync from Discord** to import that server's real channels and register its slash
+commands. The sync job fills `guild_members` from the servers where you have *Manage Server*, and
+RLS keeps everything else out.
+
+Check readiness any time at `/api/health`, or open `/setup` for a checklist of what's still missing.
+If Discord OAuth isn't configured yet, the app says so up front instead of showing a broken sign-in
+button, and the demo dataset stays available via **Explore the demo**.
 
 ## Scheduling in production
 

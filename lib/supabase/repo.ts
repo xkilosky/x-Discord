@@ -128,19 +128,42 @@ export const supabaseRepo: Repo = {
 
   async listGuilds() {
     const db = await supabaseServer();
+    // Role is per membership, not per guild — join the caller's row so two
+    // admins of the same server can see different roles.
+    const { data: auth } = await db.auth.getUser();
+    const userId = auth.user?.id;
+    if (!userId) return [];
+
     const { data, error } = await db
       .from("guilds")
-      .select("*")
+      .select("*, guild_members!inner(role, user_id)")
+      .eq("guild_members.user_id", userId)
       .order("bot_installed", { ascending: false })
       .order("name");
     if (error) throw new Error(`listGuilds: ${error.message}`);
-    return (data ?? []).map(toGuild);
+
+    return (data ?? []).map((row) => {
+      const membership = (row as { guild_members?: Array<{ role?: string }> }).guild_members?.[0];
+      return toGuild({ ...(row as Row), viewer_role: membership?.role ?? "moderator" });
+    });
   },
 
   async getGuild(id) {
     const db = await supabaseServer();
-    const { data } = await db.from("guilds").select("*").eq("id", id).maybeSingle();
-    return data ? toGuild(data) : null;
+    const { data: auth } = await db.auth.getUser();
+    const userId = auth.user?.id;
+    if (!userId) return null;
+
+    const { data } = await db
+      .from("guilds")
+      .select("*, guild_members!inner(role, user_id)")
+      .eq("id", id)
+      .eq("guild_members.user_id", userId)
+      .maybeSingle();
+
+    if (!data) return null;
+    const membership = (data as { guild_members?: Array<{ role?: string }> }).guild_members?.[0];
+    return toGuild({ ...(data as Row), viewer_role: membership?.role ?? "moderator" });
   },
 
   async listChannels(guildId) {
@@ -245,6 +268,7 @@ export const supabaseRepo: Repo = {
     if (patch.error !== undefined) payload.error = patch.error;
     if (patch.content !== undefined) payload.content = patch.content;
     if (patch.scheduledFor !== undefined) payload.scheduled_for = patch.scheduledFor;
+    if (patch.discordMessageId !== undefined) payload.discord_message_id = patch.discordMessageId;
     if (Object.keys(payload).length === 0) return;
     const { error } = await db.from("messages").update(payload).eq("id", id);
     if (error) throw new Error(`markMessage: ${error.message}`);

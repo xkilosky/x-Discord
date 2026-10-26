@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getRepo } from "@/lib/repo";
 import { requireUser, DEMO_USER } from "@/lib/auth";
 import { DEMO_MODE } from "@/lib/env";
-import { postChannelMessage, applyModeration } from "@/lib/discord/rest";
+import { postChannelMessage, applyModeration, resolveMemberId } from "@/lib/discord/rest";
 import type { AutomodRule, GuildSettings, ModActionType } from "@/lib/types";
 
 type Result = { ok: boolean; message: string };
@@ -70,7 +70,11 @@ export async function sendMessage(
   if (!scheduledFor) {
     const result = await postChannelMessage({ channelId, content, embed });
     if (result.ok) {
-      await repo.markMessage(record.id, { status: "sent", sentAt: new Date().toISOString() });
+      await repo.markMessage(record.id, {
+        status: "sent",
+        sentAt: new Date().toISOString(),
+        discordMessageId: result.messageId ?? null,
+      });
     } else {
       await repo.markMessage(record.id, {
         status: "failed",
@@ -213,13 +217,26 @@ export async function applyModAction(
   const repo = await getRepo();
   const moderator = await actor();
 
-  // IDs look like snowflakes; names need a lookup the bot normally does. In
-  // demo mode we accept either and log it as a case.
-  const targetId = /^\d{15,25}$/.test(targetName) ? targetName : `name:${targetName.toLowerCase()}`;
-
   let duration: string | null = null;
   if (type === "timeout") {
     duration = `${Math.max(1, Math.round(minutes))}m`;
+  }
+
+  // In live mode a username has to become a snowflake before Discord will act
+  // on it — destroying a member by guessed id is not acceptable.
+  let targetId = /^\d{15,25}$/.test(targetName) ? targetName : `name:${targetName.toLowerCase()}`;
+  let resolvedName = targetName;
+
+  if (!DEMO_MODE) {
+    const resolved = await resolveMemberId({ guildId, query: targetName });
+    if (!resolved.ok || !resolved.userId) {
+      if (type !== "warn") {
+        return { ok: false, message: resolved.error ?? "Could not find that member." };
+      }
+    } else {
+      targetId = resolved.userId;
+      resolvedName = resolved.username ?? targetName;
+    }
   }
 
   if (type !== "warn" && /^\d{15,25}$/.test(targetId)) {
@@ -237,7 +254,7 @@ export async function applyModAction(
     guildId,
     type,
     targetId,
-    targetName,
+    targetName: resolvedName,
     moderator,
     reason,
     duration,
@@ -289,4 +306,48 @@ export async function runScheduler(): Promise<{ delivered: number; failed: numbe
   }
 
   return { delivered: result.delivered, failed: result.failed };
+}
+
+/* --------------------------- discord live sync ---------------------------- */
+
+/**
+ * Pull real channels, commands and membership from Discord into Postgres.
+ * Authorization comes from the RLS-scoped read below: a user can only sync a
+ * guild that already appears in their own guild list.
+ */
+export async function syncDiscordServer(
+  _prev: Result | null,
+  formData: FormData,
+): Promise<Result> {
+  const guildId = String(formData.get("guildId") ?? "");
+  if (!guildId) return { ok: false, message: "Unknown server." };
+
+  const repo = await getRepo();
+  const guild = await repo.getGuild(guildId);
+  if (!guild) return { ok: false, message: "You don't have access to that server." };
+
+  if (DEMO_MODE) {
+    return {
+      ok: false,
+      message: "Demo mode — add DISCORD_BOT_TOKEN and Supabase keys to sync a real server.",
+    };
+  }
+
+  const { syncGuild } = await import("@/lib/discord/provision");
+  const result = await syncGuild(guildId);
+
+  refresh(guildId);
+  refresh(guildId, "messages");
+  refresh(guildId, "automod");
+  refresh(guildId, "commands");
+  refresh(guildId, "settings");
+
+  if (!result.ok) {
+    return { ok: false, message: result.error ?? "Sync failed." };
+  }
+
+  return {
+    ok: true,
+    message: `Synced ${result.channels} channels and ${result.commands} commands from Discord.`,
+  };
 }

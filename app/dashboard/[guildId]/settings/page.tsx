@@ -7,6 +7,7 @@ import { loadGuildBundle } from "@/lib/data";
 import { botInviteUrl, DEMO_MODE, hasBotToken, serverEnv } from "@/lib/env";
 import { formatNumber } from "@/lib/utils";
 import { installBot } from "@/app/actions/guild";
+import { SyncButton } from "@/components/settings/sync-button";
 
 export const metadata = { title: "Settings" };
 
@@ -143,23 +144,29 @@ export default async function SettingsPage({ params }: { params: Promise<{ guild
               </Badge>
             </div>
 
-            {!guild.botInstalled ? (
-              <form action={installBot} className="mt-3">
-                <input type="hidden" name="guildId" value={guild.id} />
-                <button type="submit" className="btn btn-primary w-full !py-2 !text-[12.5px]">
-                  <Bot className="h-3.5 w-3.5" /> Install bot here
-                </button>
-              </form>
-            ) : null}
-
-            <a
-              href={invite}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-ghost mt-2 w-full !py-2 !text-[12.5px]"
-            >
-              Open Discord invite <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+            {DEMO_MODE ? (
+              !guild.botInstalled ? (
+                <form action={installBot} className="mt-3">
+                  <input type="hidden" name="guildId" value={guild.id} />
+                  <button type="submit" className="btn btn-primary w-full !py-2 !text-[12.5px]">
+                    <Bot className="h-3.5 w-3.5" /> Install bot here (demo)
+                  </button>
+                </form>
+              ) : null
+            ) : (
+              <div className="mt-3 space-y-1.5">
+                <a
+                  href={invite}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-primary w-full !py-2 !text-[12.5px]"
+                >
+                  <Bot className="h-3.5 w-3.5" /> {guild.botInstalled ? "Re-invite bot" : "Invite bot"}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <SyncButton guildId={guild.id} />
+              </div>
+            )}
 
             {DEMO_MODE ? (
               <p className="mt-2 text-[10.5px] leading-relaxed text-mist-500">

@@ -5,6 +5,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import type { SessionUser } from "@/lib/types";
 
 export const DEMO_SESSION_COOKIE = "xd_session";
+export const MODE_COOKIE = "xd_mode";
 
 /**
  * The demo account. Signing in with Discord in demo mode sets a cookie and
@@ -23,8 +24,12 @@ export const DEMO_USER: SessionUser = {
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  if (DEMO_MODE) {
-    const store = await cookies();
+  const store = await cookies();
+
+  // Demo mode by configuration, or a session explicitly started with
+  // "Explore the demo" on a live deployment.
+  const demoPinned = store.get(MODE_COOKIE)?.value === "demo";
+  if (DEMO_MODE || demoPinned) {
     return store.get(DEMO_SESSION_COOKIE)?.value === "1" ? DEMO_USER : null;
   }
 

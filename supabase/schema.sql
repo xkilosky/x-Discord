@@ -156,16 +156,6 @@ alter table public.bot_commands enable row level security;
 alter table public.guild_settings enable row level security;
 alter table public.bot_status enable row level security;
 
-create or replace function public.current_profile_id()
-returns uuid language sql stable as $$
-  select id from public.user_profiles where discord_id = (
-    select coalesce(
-      auth.jwt() -> 'user_metadata' ->> 'provider_id',
-      auth.jwt() -> 'user_metadata' ->> 'sub'
-    )
-  )
-$$;
-
 -- A user can read guilds they are a member of.
 drop policy if exists "read own guilds" on public.guilds;
 create policy "read own guilds" on public.guilds for select
