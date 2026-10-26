@@ -154,6 +154,11 @@ Not affiliated with Discord Inc. Discord is a trademark of Discord Inc.
 
 ## Hosting
 
+**Live:** <https://xcord-three.vercel.app> — Vercel project `xcord` (Flux team), deployed from the
+`arena/f1e92cbe-x-discord` branch. `NEXT_PUBLIC_APP_URL` is set to that URL in the project's
+environment variables. `xcord.vercel.app` was already taken by another account, which is why the
+assigned slug is `xcord-three`.
+
 The project is set up for Vercel out of the box (framework detected as Next.js, no build flags
 needed). Two hosting notes:
 
