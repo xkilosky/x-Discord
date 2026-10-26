@@ -66,8 +66,10 @@ Then open the dashboard and click **Invite bot** to add it to a server. The sync
 
 Three interchangeable callers hit the same `tickScheduler()` implementation:
 
-- **Vercel Cron** — [`vercel.json`](vercel.json) already points at `/api/scheduler/tick` every minute.
-  Set `CRON_SECRET`; the route requires `Authorization: Bearer $CRON_SECRET`.
+- **Vercel Cron** — [`vercel.json`](vercel.json) points at `/api/scheduler/tick`. It ships on a
+  daily schedule because Vercel **Hobby** only allows once-per-day crons; on Pro/Enterprise change
+  `schedule` to `* * * * *` for minute-accurate sends. Set `CRON_SECRET` — the route requires
+  `Authorization: Bearer $CRON_SECRET`.
 - **Self-hosted bot** — the bot loop ticks every 30 seconds on its own.
 - **Manual** — the heartbeat chip on the Messages page runs a tick for you (demo mode).
 
@@ -149,3 +151,16 @@ npm run typecheck  # tsc --noEmit
 ---
 
 Not affiliated with Discord Inc. Discord is a trademark of Discord Inc.
+
+## Hosting
+
+The project is set up for Vercel out of the box (framework detected as Next.js, no build flags
+needed). Two hosting notes:
+
+- **Cron cadence** is limited to once per day on the Hobby plan (see above). Scheduled messages
+  still queue correctly — they are delivered on the next tick, so a 24h cadence means a message
+  scheduled for 09:00 may land at the daily run instead. For minute-accurate delivery run the bot
+  as a long-lived worker (`BOT_DISABLED` unset) or upgrade the plan.
+- **The Discord gateway cannot run on serverless functions.** Set `BOT_DISABLED=1` on the Vercel
+  project and host the bot process separately; the dashboard, composer, AutoMod config and case log
+  all keep working through REST.
